@@ -4,7 +4,7 @@
 #This script is not officially support by Google
 
 
-import os
+import os, json
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -18,8 +18,12 @@ NUMS = [str(i) for i in range(10)]
 # --- contants
 SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
 DEBUG = True
+USES_API_CACHE = False
 TOKEN_PATH = "debug/token.json"
 CLIENT_SECRET_PATH = "debug/client_secret.apps.googleusercontent.com.json"
+
+if os.path.exists(r"cache") == False:
+    os.makedirs("cache")
 
 
 class Youtube():
@@ -65,7 +69,7 @@ class Youtube():
         
     def get_video_info(self, ID:str) -> dict:
         """
-        get basic info from a video usign its id
+        get basic info from a video using its id
 
         input:
             ID (str) : id of the video to get the info
@@ -96,7 +100,80 @@ class Youtube():
 
         return request
 
+    def get_playlist_info(self, ID:str) -> dict:
+            """
+            get basic info from a playlist using its id
+
+            input:
+                ID (str) : id of the video to get the info
+
+            output:
+                request [dict] : data from youtube api services
+            """
+
+            # develop process
+            if DEBUG == True:
+                print(f"(get_playlist_info) playlist ID : {ID}")
+
+            argum = None
+            if USES_API_CACHE == True:
+                try:
+                    with open("cache/playlist.cache", "r") as local:
+                        argum = local.readline().strip()
+                except FileNotFoundError:
+                    pass
+
+
+            if (argum == ID):
+                if DEBUG:
+                    print("(get_playlist_info) data location: local cache", end="\n\n")
+                
+                with open("cache/playlist.cache", "r") as local:
+                    local.readline()
+                    content = json.load(local)
+
+                return content
+
+            else:
+                if DEBUG:
+                    print("(get_playlist_info) data location: API request", end="\n\n")
+
+                request_one = self.API.playlists().list(
+                    id = ID,
+                    part = ["contentDetails", "snippet"]
+                    ).execute()
+
+                request_two = self.API.playlistItems().list(
+                    playlistId = ID,
+                    part = ["contentDetails"],
+                    maxResults = 50
+                    ).execute()
+
+                tracks = []
+
+                for iterator in request_two["items"]:
+                    tracks.append(iterator["contentDetails"]["videoId"])
+
+                request_one["tracks"] = tracks
+
+                # save cache
+                with open("cache/playlist.cache", "w") as local:
+                    local.write(ID + "\n")
+                    json.dump(request_one, local)
+
+                return request_one
+
 
 
 # --- Test
 YT = Youtube()
+
+#OLAK5uy_lZ_sOzsE6zU262uuuaPb-vVJJYcbs-b4I
+
+a = YT.get_playlist_info("OLAK5uy_lZ_sOzsE6zU262uuuaPb-vVJJYcbs-b4I")
+
+print("\n")
+
+for i in a.keys():
+    print(i, end="\n")
+    print(a[i], end="\n\n")
