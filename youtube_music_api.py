@@ -14,7 +14,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 # --- other data
 NUMS = [str(i) for i in range(10)]
 
-
 # --- contants
 SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
 DEBUG = True
@@ -63,42 +62,125 @@ class Youtube():
         del flow
         del creds
 
-        if DEBUG:
+        if DEBUG == True:
             print("login... ok")
 
-        
-    def get_video_info(self, ID:str) -> dict:
+    def __get_next_page__(self, previous_request:dict, previous_response:dict) -> list:
         """
-        get basic info from a video using its id
+        - inner work funtion (RECURSIVE FUNTION)
+        
+        get the next page from a request to the api
+        
+        inputs:
+            previous_request (dict) : previous request to the api
+            previous_response (dict) : previous response (what you received) from the api
+            
+        output:
+            container (list) : all pages than possible (less the first page)
+        """
+        response_get = self.API.playlistItems().list_next(
+            previous_request = previous_request,
+            previous_response = previous_response
+        )
+        
+        response = response_get.execute()
+
+        content = [response]
+
+        if response.get("nextPageToken") != None:
+            other_response = self.__get_next_page__(response_get, response)
+            
+            #join lists one by ono
+            content += other_response
+
+        return content
+
+
+    def get_video_info(self, ID:str|list) -> list:
+        """
+        get basic info from a video or videos using its id
 
         input:
-            ID (str) : id of the video to get the info
+            ID (str | list) : id of the video to get the info or a list of ids
 
         output:
-            request [dict] : data from youtube api services
+            request (list) : data from youtube api services
         """
-        request = self.API.videos().list(
-            id = ID,
-            part = ["contentDetails", "snippet"]
-            ).execute()
-        
-        del request["kind"]
-        del request["etag"]
 
-        # format the duration data
-        time = []
+        if DEBUG == True:
+            print(f"(get_video_info) ID/s : {ID}")
 
-        for x in request["items"][0]["contentDetails"]["duration"]:
-            if x == "H" or x == "M":
-                time.append(":")
-            elif x in NUMS:
-                time.append(x)
-            
-        duration = "".join(time)
+        argum = None
+        if USES_API_CACHE == True:
+            try:
+                with open("cache/video.cache", "r") as local:
+                    argum = local.readline().strip()
+            except FileNotFoundError:
+                print("(get_video_info) [ERROR] file not found. using api instead")
 
-        request["items"][0]["contentDetails"]["duration"] = duration
+        if (argum == ID):
+            if DEBUG == True:
+                print("(get_video_info) data location: local cache", end="\n\n")
+             
+            with open("cache/video.cache", "r") as local:
+                local.readline()
+                content = json.load(local)
 
-        return request
+            return content
+
+        else:
+            if DEBUG == True:
+                print("(get_video_info) data location: API request", end="\n\n")
+
+            if type(ID) == list:
+                container  = []
+
+                #if the list of ids its too long (more than 50), the maximun request from the api is 50.
+                while len(ID) >= 1:
+                    request = self.API.videos().list(
+                        id = ID[0:50],
+                        part = ["contentDetails", "snippet"],
+                        maxResults = 50
+                    ).execute()["items"]
+
+                    container += request
+
+                    ID = ID[50:]
+                
+                request = container
+
+            else:
+                request = self.API.videos().list(
+                    id = ID,
+                    part = ["contentDetails", "snippet"]
+                    ).execute()
+                
+                request = request["items"]
+                
+            # do some modifications
+            for track in request:
+                time = []
+
+                for character in track["contentDetails"]["duration"]:
+                    if character == "H" or character == "M":
+                        time.append(":")
+                    elif character in NUMS:
+                        time.append(character)
+                    elif character == "S":
+                        if time[-2] == ":":
+                            time.insert(time.index(time[-1]), "0")
+                    
+                duration = "".join(time)
+
+                track["contentDetails"]["duration"] = duration
+
+            # save cache
+            with open("cache/video.cache", "w") as local:
+                local.write(str(ID) + "\n")
+                json.dump(request, local)
+
+            return request
+
 
     def get_playlist_info(self, ID:str) -> dict:
             """
@@ -108,7 +190,7 @@ class Youtube():
                 ID (str) : id of the video to get the info
 
             output:
-                request [dict] : data from youtube api services
+                request (dict) : data from youtube api services
             """
 
             # develop process
@@ -121,11 +203,11 @@ class Youtube():
                     with open("cache/playlist.cache", "r") as local:
                         argum = local.readline().strip()
                 except FileNotFoundError:
-                    pass
+                    print("(get_playlist_info) [ERROR] file not found. using api instead")
 
 
             if (argum == ID):
-                if DEBUG:
+                if DEBUG == True:
                     print("(get_playlist_info) data location: local cache", end="\n\n")
                 
                 with open("cache/playlist.cache", "r") as local:
@@ -135,26 +217,41 @@ class Youtube():
                 return content
 
             else:
-                if DEBUG:
+                if DEBUG == True:
                     print("(get_playlist_info) data location: API request", end="\n\n")
 
+                #get playlist info
                 request_one = self.API.playlists().list(
                     id = ID,
                     part = ["contentDetails", "snippet"]
                     ).execute()
 
+                #get the first 50 tracks from the playlist (50 is the max to a request)
                 request_two = self.API.playlistItems().list(
                     playlistId = ID,
                     part = ["contentDetails"],
                     maxResults = 50
-                    ).execute()
+                    )
+                response_two = request_two.execute()
 
+                #extract the first 50 tracks IDs
                 tracks = []
-
-                for iterator in request_two["items"]:
+                for iterator in response_two["items"]:
                     tracks.append(iterator["contentDetails"]["videoId"])
+                
+                #get the rest of track IDs using the Token
+                if response_two.get("nextPageToken") != None:
+                    other_request = self.__get_next_page__(request_two, response_two)
 
-                request_one["tracks"] = tracks
+                    for iterator in other_request:
+                        for extractor in iterator["items"]:
+                            tracks.append(extractor["contentDetails"]["videoId"])
+
+                #get the tracks info usings its IDs
+                request_three = self.get_video_info(ID = tracks)
+
+                #join the playlist info with a list of tracks with its info
+                request_one["tracks"] = request_three
 
                 # save cache
                 with open("cache/playlist.cache", "w") as local:
@@ -166,14 +263,3 @@ class Youtube():
 
 
 # --- Test
-YT = Youtube()
-
-#OLAK5uy_lZ_sOzsE6zU262uuuaPb-vVJJYcbs-b4I
-
-a = YT.get_playlist_info("OLAK5uy_lZ_sOzsE6zU262uuuaPb-vVJJYcbs-b4I")
-
-print("\n")
-
-for i in a.keys():
-    print(i, end="\n")
-    print(a[i], end="\n\n")
