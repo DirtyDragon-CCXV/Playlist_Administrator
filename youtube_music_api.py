@@ -12,19 +12,21 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 from googleapiclient.errors import HttpError as google_HttpError
 
+
 # --- other data
 NUMS = [str(i) for i in range(10)]
 
 # --- contants
-SCOPES = ['https://www.googleapis.com/auth/youtube']
+SCOPES = ['https://www.googleapis.com/auth/youtube'] #for test only, use "https://www.googleapis.com/auth/youtube.readonly"
 DEBUG = True
-USES_API_CACHE = False
-TOKEN_PATH = "debug/token.json"
-CLIENT_SECRET_PATH = "debug/client_secret.apps.googleusercontent.com.json"
+USES_API_CACHE = True
+TOKEN_PATH = r"debug/token.json"
+CLIENT_SECRET_PATH = r"debug/client_secret.apps.googleusercontent.com.json"
+
 
 # --- background work
 if os.path.exists(r"cache") == False:
-    os.makedirs("cache")
+    os.makedirs(r"cache")
 
 try:
     with open(TOKEN_PATH) as f:
@@ -36,6 +38,7 @@ except FileNotFoundError:
     print("(WARNING) Token JSON was not found.")
 
 
+
 class Youtube():
     def __init__ (self, token_path:str = TOKEN_PATH, client_secret_path:str = CLIENT_SECRET_PATH):
         """
@@ -45,7 +48,7 @@ class Youtube():
             token_path (str) : path to open or save the token to access with the api
             client_secret_path (str|None) : path to the client secret json from the google cloud api, only necesary to create the token
 
-        outputs:
+        output:
             YOUTUBE (variable) : build to use the youtube api v3
 
         @with the help of Gemini "Fast" (Google)
@@ -58,13 +61,20 @@ class Youtube():
 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
+                if DEBUG == True:
+                    print("(WARNING) Token is expired, the token will be refreshed.")
+
                 creds.refresh(Request())
             else:
+                if DEBUG == True:
+                    print("(WARNING) Token is gonna be created.")
+
                 if client_secret_path != None:
                     flow = InstalledAppFlow.from_client_secrets_file(client_secret_path, SCOPES)
                     creds = flow.run_local_server(port=0)
                 else:
-                    print("the path of client_secret json is requiered to create the token.")
+                    print("[ERROR] the path of 'client_secret' json is requiered to create the token.")
+                    exit(1)
             
             with open(token_path, 'w') as token:
                 token.write(creds.to_json())
@@ -112,7 +122,7 @@ class Youtube():
         get basic info from a video or videos using its id
 
         input:
-            ID (str | list) : id of the video to get the info or a list of ids
+            ID (str | list) : id or a list of ids to get the info
 
         output:
             request (list) : data from youtube api services
@@ -124,7 +134,7 @@ class Youtube():
         argum = None
         if USES_API_CACHE == True:
             try:
-                with open("cache/video.cache", "r") as local:
+                with open(r"cache/video.cache", "r") as local:
                     argum = local.readline().strip()
             except FileNotFoundError:
                 print("(get_video_info) [ERROR] file not found. using api instead")
@@ -133,7 +143,7 @@ class Youtube():
             if DEBUG == True:
                 print("(get_video_info) data location: local cache", end="\n\n")
              
-            with open("cache/video.cache", "r") as local:
+            with open(r"cache/video.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
 
@@ -186,7 +196,7 @@ class Youtube():
                 track["contentDetails"]["duration"] = duration
 
             # save cache
-            with open("cache/video.cache", "w") as local:
+            with open(r"cache/video.cache", "w") as local:
                 local.write(str(ID) + "\n")
                 json.dump(request, local)
 
@@ -204,14 +214,13 @@ class Youtube():
                 request (dict) : data from youtube api services with tracks info
             """
 
-            # develop process
             if DEBUG == True:
                 print(f"(get_playlist_tracks_info) playlist ID : {ID}")
 
             argum = None
             if USES_API_CACHE == True:
                 try:
-                    with open("cache/playlist_tracks.cache", "r") as local:
+                    with open(r"cache/playlist_tracks.cache", "r") as local:
                         argum = local.readline().strip()
                 except FileNotFoundError:
                     print("(get_playlist_tracks_info) [ERROR] file not found. using api instead")
@@ -221,7 +230,7 @@ class Youtube():
                 if DEBUG == True:
                     print("(get_playlist_tracks_info) data location: local cache", end="\n\n")
                 
-                with open("cache/playlist_tracks.cache", "r") as local:
+                with open(r"cache/playlist_tracks.cache", "r") as local:
                     local.readline()
                     content = json.load(local)
 
@@ -265,7 +274,7 @@ class Youtube():
                 request_one["tracks"] = request_three
 
                 # save cache
-                with open("cache/playlist_tracks.cache", "w") as local:
+                with open(r"cache/playlist_tracks.cache", "w") as local:
                     local.write(ID + "\n")
                     json.dump(request_one, local)
 
@@ -278,7 +287,8 @@ class Youtube():
         change the index from a item, inner the playlist.
 
         inputs:
-            item (dict) : track info in the next JSON estructure:
+            playlist_id (str) : Id of the playlist that the track its in
+            item (dict) : track info (from playlistItems) in the next JSON estructure:
                           {
                             'id' : str,
                             'resource_id' : {
@@ -328,14 +338,13 @@ class Youtube():
             request (dict) : data from youtube api services
         """
 
-        # develop process
         if DEBUG == True:
             print(f"(get_playlist_info) playlist ID : {ID}")
 
         argum = None
         if USES_API_CACHE == True:
             try:
-                with open("cache/playlist_info.cache", "r") as local:
+                with open(r"cache/playlist_info.cache", "r") as local:
                     argum = local.readline().strip()
             except FileNotFoundError:
                 print("(get_playlist_info) [ERROR] file not found. using api instead")
@@ -345,7 +354,7 @@ class Youtube():
             if DEBUG == True:
                 print("(get_playlist_info) data location: local cache", end="\n\n")
             
-            with open("cache/playlist_info.cache", "r") as local:
+            with open(r"cache/playlist_info.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
 
@@ -386,21 +395,67 @@ class Youtube():
             request_one["tracks"] = tracks
 
             # save cache
-            with open("cache/playlist_info.cache", "w") as local:
+            with open(r"cache/playlist_info.cache", "w") as local:
                 local.write(ID + "\n")
                 json.dump(request_one, local)
 
             return request_one
 
-"""
-add funtion to do a search with name song and artist name 
-"""
 
-# --- Test
-YT = Youtube()
+    def search_track (self, query:str, type_filter:str|None = "video", from_channel:str|None = None, results_size:int = 5) -> dict:
+        """
+        input:
+            query (str) : the query to search
 
-petition = YT.get_playlist_info( ID = "url" )
+            - optionals
+            type_filter (str | None) : the type of content [channel | playlist | video | music]
+            from_channel (str | None) : id of from a channel to only search in its videos
+            results_size (int) : the maximun results for page, by default is five [max is 50]
 
-for i in petition:
-    print(i)
-    print(petition[i], end="\n\n")
+        output:
+            request (dict) : a page of search
+        """
+        if DEBUG == True:
+            print(f"(search_track) Query : {query}")
+
+        argum = None
+        metadata = str([query, type_filter, from_channel, results_size])
+        if USES_API_CACHE == True:
+            try:
+                with open(r"cache/search.cache", "r") as local:
+                    argum = local.readline().strip()
+            except FileNotFoundError:
+                print("(search_track) [ERROR] file not found. using api instead")
+
+        if (argum == metadata):
+            if DEBUG == True:
+                print("(search_track) data location: local cache", end="\n\n")
+            
+            with open(r"cache/search.cache", "r") as local:
+                local.readline()
+                content = json.load(local)
+
+            return content
+
+        else:
+            if DEBUG == True:
+                print("(search_track) data location: API request", end="\n\n")
+
+            if type_filter == "music":
+                query += ' "topic"'
+                type_filter = None
+
+            request = request_one = self.API.search().list(
+                part = "snippet",
+                q = query,
+                type = type_filter,
+                channelId = from_channel,
+                maxResults = results_size
+            ).execute()
+
+        # save cache
+        with open(r"cache/search.cache", "w") as local:
+            local.write(metadata + "\n")
+            json.dump(request_one, local)
+
+        return request
