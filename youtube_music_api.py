@@ -16,8 +16,8 @@ from googleapiclient.errors import HttpError as google_HttpError
 # --- other data
 NUMS = [str(i) for i in range(10)]
 
-# --- contants
-SCOPES = ['https://www.googleapis.com/auth/youtube'] #for test only, use "https://www.googleapis.com/auth/youtube.readonly"
+# --- constants
+SCOPES = ['https://www.googleapis.com/auth/youtube'] #for only test, use "https://www.googleapis.com/auth/youtube.readonly"
 DEBUG = True
 USES_API_CACHE = True
 TOKEN_PATH = r"debug/token.json"
@@ -49,7 +49,7 @@ class Youtube():
             client_secret_path (str|None) : path to the client secret json from the google cloud api, only necesary to create the token
 
         output:
-            YOUTUBE (variable) : build to use the youtube api v3
+            YOUTUBE (class) : build to use the youtube api v3
 
         @with the help of Gemini "Fast" (Google)
         """
@@ -86,6 +86,7 @@ class Youtube():
         if DEBUG == True:
             print("login... ok")
 
+
     def __get_next_page__(self, previous_request:dict, previous_response:dict) -> list:
         """
         - inner work funtion (RECURSIVE FUNTION)
@@ -117,6 +118,49 @@ class Youtube():
         return content
 
 
+    def get_user_playlists(self):
+        """
+        get the playlists from the authenticate user
+
+        output:
+            USER_PLAYLIST (dict) = a list with all the playlist in the user account (only the playlists that are owner)
+        """
+        def get_petition():
+            content = self.API.playlists().list(
+                            part = ["snippet"],
+                            mine = True,
+                            maxResults = 50
+            ).execute()
+
+            return content
+
+        if USES_API_CACHE == True:
+            try:
+                with open(r"cache/yt_user_playlist.cache", "r") as f:
+                    USER_PLAYLIST = json.load(f)
+
+                if DEBUG == True:
+                    print("(get_user_playlists)  data location: local cache.")
+
+            except FileNotFoundError:
+                if DEBUG == True:
+                    print("(get_user_playlists) [ERROR] file not found. using api instead")
+                
+                USER_PLAYLIST = get_petition()
+
+                # save cache
+                with open(r"cache/yt_user_playlist.cache", "w") as f:
+                    json.dump(self.USER_PLAYLIST, f)
+
+        else:
+            if DEBUG == True:
+                print("(get_user_playlists) data location: API request.")
+
+            USER_PLAYLIST = get_petition()
+
+        return USER_PLAYLIST
+
+
     def get_video_info(self, ID:str|list) -> list:
         """
         get basic info from a video or videos using its id
@@ -134,16 +178,17 @@ class Youtube():
         argum = None
         if USES_API_CACHE == True:
             try:
-                with open(r"cache/video.cache", "r") as local:
+                with open(r"cache/yt_video.cache", "r") as local:
                     argum = local.readline().strip()
             except FileNotFoundError:
-                print("(get_video_info) [ERROR] file not found. using api instead")
+                if DEBUG == True:
+                    print("(get_video_info) [ERROR] file not found. using api instead")
 
         if (argum == ID):
             if DEBUG == True:
                 print("(get_video_info) data location: local cache", end="\n\n")
              
-            with open(r"cache/video.cache", "r") as local:
+            with open(r"cache/yt_video.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
 
@@ -196,7 +241,7 @@ class Youtube():
                 track["contentDetails"]["duration"] = duration
 
             # save cache
-            with open(r"cache/video.cache", "w") as local:
+            with open(r"cache/yt_video.cache", "w") as local:
                 local.write(str(ID) + "\n")
                 json.dump(request, local)
 
@@ -220,17 +265,18 @@ class Youtube():
             argum = None
             if USES_API_CACHE == True:
                 try:
-                    with open(r"cache/playlist_tracks.cache", "r") as local:
+                    with open(r"cache/yt_playlist_tracks.cache", "r") as local:
                         argum = local.readline().strip()
                 except FileNotFoundError:
-                    print("(get_playlist_tracks_info) [ERROR] file not found. using api instead")
+                    if DEBUG == True:
+                        print("(get_playlist_tracks_info) [ERROR] file not found. using api instead")
 
 
             if (argum == ID):
                 if DEBUG == True:
                     print("(get_playlist_tracks_info) data location: local cache", end="\n\n")
                 
-                with open(r"cache/playlist_tracks.cache", "r") as local:
+                with open(r"cache/yt_playlist_tracks.cache", "r") as local:
                     local.readline()
                     content = json.load(local)
 
@@ -244,14 +290,14 @@ class Youtube():
                 request_one = self.API.playlists().list(
                     id = ID,
                     part = ["contentDetails", "snippet"]
-                    ).execute()
+                ).execute()
 
                 #get the first 50 tracks from the playlist (50 is the max to a request)
                 request_two = self.API.playlistItems().list(
                     playlistId = ID,
                     part = ["contentDetails"],
                     maxResults = 50
-                    )
+                )
                 response_two = request_two.execute()
 
                 #extract the first 50 tracks IDs
@@ -274,7 +320,7 @@ class Youtube():
                 request_one["tracks"] = request_three
 
                 # save cache
-                with open(r"cache/playlist_tracks.cache", "w") as local:
+                with open(r"cache/yt_playlist_tracks.cache", "w") as local:
                     local.write(ID + "\n")
                     json.dump(request_one, local)
 
@@ -282,7 +328,6 @@ class Youtube():
 
 
     def change_playlist_item_index(self, playlist_id:str, item:dict) -> int:
-        # !--> add cache system
         """
         change the index from a item, inner the playlist.
 
@@ -344,17 +389,18 @@ class Youtube():
         argum = None
         if USES_API_CACHE == True:
             try:
-                with open(r"cache/playlist_info.cache", "r") as local:
+                with open(r"cache/yt_playlist_info.cache", "r") as local:
                     argum = local.readline().strip()
             except FileNotFoundError:
-                print("(get_playlist_info) [ERROR] file not found. using api instead")
+                if DEBUG == True:
+                    print("(get_playlist_info) [ERROR] file not found. using api instead")
 
 
         if (argum == ID):
             if DEBUG == True:
                 print("(get_playlist_info) data location: local cache", end="\n\n")
             
-            with open(r"cache/playlist_info.cache", "r") as local:
+            with open(r"cache/yt_playlist_info.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
 
@@ -395,14 +441,14 @@ class Youtube():
             request_one["tracks"] = tracks
 
             # save cache
-            with open(r"cache/playlist_info.cache", "w") as local:
+            with open(r"cache/yt_playlist_info.cache", "w") as local:
                 local.write(ID + "\n")
                 json.dump(request_one, local)
 
             return request_one
 
 
-    def search_track (self, query:str, type_filter:str|None = "video", from_channel:str|None = None, results_size:int = 5) -> dict:
+    def search_track(self, query:str, type_filter:str|None = "video", from_channel:str|None = None, results_size:int = 5) -> dict:
         """
         input:
             query (str) : the query to search
@@ -422,16 +468,17 @@ class Youtube():
         metadata = str([query, type_filter, from_channel, results_size])
         if USES_API_CACHE == True:
             try:
-                with open(r"cache/search.cache", "r") as local:
+                with open(r"cache/yt_search.cache", "r") as local:
                     argum = local.readline().strip()
             except FileNotFoundError:
-                print("(search_track) [ERROR] file not found. using api instead")
+                if DEBUG == True:
+                    print("(search_track) [ERROR] file not found. using api instead")
 
         if (argum == metadata):
             if DEBUG == True:
                 print("(search_track) data location: local cache", end="\n\n")
             
-            with open(r"cache/search.cache", "r") as local:
+            with open(r"cache/yt_search.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
 
@@ -454,7 +501,7 @@ class Youtube():
             ).execute()
 
         # save cache
-        with open(r"cache/search.cache", "w") as local:
+        with open(r"cache/yt_search.cache", "w") as local:
             local.write(metadata + "\n")
             json.dump(request_one, local)
 
