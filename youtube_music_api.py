@@ -20,7 +20,7 @@ NUMS = [str(i) for i in range(10)]
 SCOPES = ['https://www.googleapis.com/auth/youtube'] #for only test, use "https://www.googleapis.com/auth/youtube.readonly"
 DEBUG = True
 USES_API_CACHE = True
-TOKEN_PATH = r"debug/token.json"
+TOKEN_PATH = r"debug/yt_token.json"
 CLIENT_SECRET_PATH = r"debug/client_secret.apps.googleusercontent.com.json"
 
 
@@ -163,7 +163,7 @@ class Youtube():
 
     def get_video_info(self, ID:str|list) -> list:
         """
-        get basic info from a video or videos using its id
+        get info from a video or videos using its id
 
         input:
             ID (str | list) : id or a list of ids to get the info
@@ -223,7 +223,7 @@ class Youtube():
                 
                 request = request["items"]
                 
-            # do some modifications
+            # change duration format
             for track in request:
                 time = []
 
@@ -248,136 +248,12 @@ class Youtube():
             return request
 
 
-    def get_playlist_tracks_info(self, ID:str) -> dict:
-            """
-            get basic info about tracks from a playlist using its id
-
-            input:
-                ID (str) : id of the video to get the info
-
-            output:
-                request (dict) : data from youtube api services with tracks info
-            """
-
-            if DEBUG == True:
-                print(f"(get_playlist_tracks_info) playlist ID : {ID}")
-
-            argum = None
-            if USES_API_CACHE == True:
-                try:
-                    with open(r"cache/yt_playlist_tracks.cache", "r") as local:
-                        argum = local.readline().strip()
-                except FileNotFoundError:
-                    if DEBUG == True:
-                        print("(get_playlist_tracks_info) [ERROR] file not found. using api instead")
-
-
-            if (argum == ID):
-                if DEBUG == True:
-                    print("(get_playlist_tracks_info) data location: local cache", end="\n\n")
-                
-                with open(r"cache/yt_playlist_tracks.cache", "r") as local:
-                    local.readline()
-                    content = json.load(local)
-
-                return content
-
-            else:
-                if DEBUG == True:
-                    print("(get_playlist_tracks_info) data location: API request", end="\n\n")
-
-                #get playlist info
-                request_one = self.API.playlists().list(
-                    id = ID,
-                    part = ["contentDetails", "snippet"]
-                ).execute()
-
-                #get the first 50 tracks from the playlist (50 is the max to a request)
-                request_two = self.API.playlistItems().list(
-                    playlistId = ID,
-                    part = ["contentDetails"],
-                    maxResults = 50
-                )
-                response_two = request_two.execute()
-
-                #extract the first 50 tracks IDs
-                tracks = []
-                for iterator in response_two["items"]:
-                    tracks.append(iterator["contentDetails"]["videoId"])
-                
-                #get the rest of track IDs using the Token
-                if response_two.get("nextPageToken") != None:
-                    other_request = self.__get_next_page__(request_two, response_two)
-
-                    for iterator in other_request:
-                        for extractor in iterator["items"]:
-                            tracks.append(extractor["contentDetails"]["videoId"])
-
-                #get the tracks info usings its IDs
-                request_three = self.get_video_info(ID = tracks)
-
-                #join the playlist info with a list of tracks with its info
-                request_one["tracks"] = request_three
-
-                # save cache
-                with open(r"cache/yt_playlist_tracks.cache", "w") as local:
-                    local.write(ID + "\n")
-                    json.dump(request_one, local)
-
-                return request_one
-
-
-    def change_playlist_item_index(self, playlist_id:str, item:dict) -> int:
-        """
-        change the index from a item, inner the playlist.
-
-        inputs:
-            playlist_id (str) : Id of the playlist that the track its in
-            item (dict) : track info (from playlistItems) in the next JSON estructure:
-                          {
-                            'id' : str,
-                            'resource_id' : {
-                                'kind' : str,
-                                'video_id' : str
-                            },
-                            'index' : int
-                          }
-
-        outputs:
-            exit_code (int) = 0 for index changed, 1 for Error tried it
-        """
-        exit_code = 0
-
-        try:
-            request = self.API.playlistItems().update(
-                part = ["id", "snippet"],
-                body = {
-                    "id": item["id"],
-                    "snippet": {
-                        "playlistId" : playlist_id,
-                        "resourceId": {
-                            "kind": item["resource_id"]["kind"],
-                            "videoId": item["resource_id"]["video_id"],
-                        },
-                        "position": item["index"],
-                    }
-                }
-            ).execute()
-        except google_HttpError as e:
-            if DEBUG == True:
-                print("(change_playlist_item_index) [ERROR]:")
-                print(e)
-            exit_code = 1
-
-        return exit_code
-
-
     def get_playlist_info(self, ID:str) -> dict:
         """
-        get basic info from a playlist using its id
+        get info from a playlist using its id, with basic info about tracks
 
         input:
-            ID (str) : id of the video to get the info
+            ID (str) : id of the playlist to get the info
 
         output:
             request (dict) : data from youtube api services
@@ -446,6 +322,106 @@ class Youtube():
                 json.dump(request_one, local)
 
             return request_one
+
+
+    def get_playlist_tracks_info(self, ID:str) -> dict:
+        """
+        get complete info about tracks from a playlist using its id
+
+        input:
+            ID (str) : id of the playlist to get the info
+
+        output:
+            request (dict) : data from youtube api services with tracks info
+        """
+
+        if DEBUG == True:
+            print(f"(get_playlist_tracks_info) playlist ID : {ID}")
+
+        argum = None
+        if USES_API_CACHE == True:
+            try:
+                with open(r"cache/yt_playlist_tracks.cache", "r") as local:
+                    argum = local.readline().strip()
+            except FileNotFoundError:
+                if DEBUG == True:
+                    print("(get_playlist_tracks_info) [ERROR] file not found. using api instead")
+
+
+        if (argum == ID):
+            if DEBUG == True:
+                print("(get_playlist_tracks_info) data location: local cache", end="\n\n")
+            
+            with open(r"cache/yt_playlist_tracks.cache", "r") as local:
+                local.readline()
+                content = json.load(local)
+
+            return content
+
+        else:
+            if DEBUG == True:
+                print("(get_playlist_tracks_info) data location: API request", end="\n\n")
+
+            playlist = self.get_playlist_info(ID = ID)
+
+            tracks = []
+            for i in playlist["tracks"]:
+                tracks.append( i["snippet"]["resourceId"]["videoId"] )
+
+            #get the tracks info usings its IDs
+            request = self.get_video_info(ID = tracks)
+
+            # save cache
+            with open(r"cache/yt_playlist_tracks.cache", "w") as local:
+                local.write(ID + "\n")
+                json.dump(request, local)
+
+            return request
+
+
+    def change_playlist_item_index(self, playlist_id:str, item:dict) -> int:
+        """
+        change the index from a item, inner the playlist.
+
+        inputs:
+            playlist_id (str) : Id of the playlist that the track its in
+            item (dict) : track info (from playlistItems) in the next JSON estructure:
+                          {
+                            'id' : str,
+                            'resource_id' : {
+                                'kind' : str,
+                                'video_id' : str
+                            },
+                            'index' : int
+                          }
+
+        outputs:
+            exit_code (int) = 0 for index changed, 1 for Error tried it
+        """
+        exit_code = 0
+
+        try:
+            request = self.API.playlistItems().update(
+                part = ["id", "snippet"],
+                body = {
+                    "id": item["id"],
+                    "snippet": {
+                        "playlistId" : playlist_id,
+                        "resourceId": {
+                            "kind": item["resource_id"]["kind"],
+                            "videoId": item["resource_id"]["video_id"],
+                        },
+                        "position": item["index"],
+                    }
+                }
+            ).execute()
+        except google_HttpError as e:
+            if DEBUG == True:
+                print("(change_playlist_item_index) [ERROR]:")
+                print(e)
+            exit_code = 1
+
+        return exit_code
 
 
     def search_track(self, query:str, type_filter:str|None = "video", from_channel:str|None = None, results_size:int = 5) -> dict:
