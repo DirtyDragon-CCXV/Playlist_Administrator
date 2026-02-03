@@ -123,7 +123,7 @@ class Youtube():
         get the playlists from the authenticate user
 
         output:
-            USER_PLAYLIST (dict) = a list with all the playlist in the user account (only the playlists that are owner)
+            playlists (dict) = a list with all the playlist in the user account (only the playlists that are owner)
         """
         def get_petition():
             content = self.API.playlists().list(
@@ -137,7 +137,7 @@ class Youtube():
         if USES_API_CACHE == True:
             try:
                 with open(r"cache/yt_user_playlist.cache", "r") as f:
-                    USER_PLAYLIST = json.load(f)
+                    playlists = json.load(f)
 
                 if DEBUG == True:
                     print("(get_user_playlists)  data location: local cache.")
@@ -146,19 +146,19 @@ class Youtube():
                 if DEBUG == True:
                     print("(get_user_playlists) [ERROR] file not found. using api instead")
                 
-                USER_PLAYLIST = get_petition()
+                playlists = get_petition()
 
                 # save cache
                 with open(r"cache/yt_user_playlist.cache", "w") as f:
-                    json.dump(self.USER_PLAYLIST, f)
+                    json.dump(playlists, f)
 
         else:
             if DEBUG == True:
                 print("(get_user_playlists) data location: API request.")
 
-            USER_PLAYLIST = get_petition()
+            playlists = get_petition()
 
-        return USER_PLAYLIST
+        return playlists
 
 
     def get_video_info(self, ID:str|list) -> list:
@@ -392,7 +392,7 @@ class Youtube():
                                 'kind' : str,
                                 'video_id' : str
                             },
-                            'index' : int
+                            'position' : int
                           }
 
         outputs:
@@ -411,7 +411,7 @@ class Youtube():
                             "kind": item["resource_id"]["kind"],
                             "videoId": item["resource_id"]["video_id"],
                         },
-                        "position": item["index"],
+                        "position": item["position"],
                     }
                 }
             ).execute()
