@@ -3,6 +3,11 @@
 #OS: Debian GNU/Linux 13 (Trixie)
 #This script is not officially support by Google
 
+"""
+./youtube_music_api.py
+
+Module to simplify the interaction with the Youtube API
+"""
 
 import os, json
 from googleapiclient.discovery import build
@@ -11,6 +16,7 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 from googleapiclient.errors import HttpError as google_HttpError
+from google.auth.exceptions import RefreshError as google_RefreshError
 
 
 # --- other data
@@ -64,7 +70,13 @@ class Youtube():
                 if DEBUG == True:
                     print("(WARNING) Token is expired, the token will be refreshed.")
 
-                creds.refresh(Request())
+                try:
+                    creds.refresh(Request())
+                except google_RefreshError:
+                    os.remove("debug/yt_token.json")
+                    print("[ERROR] the token is unavailable and was deleted. Start the script again to create a new token.")
+                    exit(1)
+
             else:
                 if DEBUG == True:
                     print("(WARNING) Token is gonna be created.")
@@ -118,7 +130,7 @@ class Youtube():
         return content
 
 
-    def get_user_playlists(self):
+    def get_user_playlists(self, save_as_file:bool = False):
         """
         get the playlists from the authenticate user
 
@@ -157,6 +169,27 @@ class Youtube():
                 print("(get_user_playlists) data location: API request.")
 
             playlists = get_petition()
+
+        if save_as_file == True:
+            cache = []
+            # extract only the ids and names from playlists
+            for x in playlists["items"]:
+                cache.append((x["id"], x["snippet"]["title"]))
+
+            try:
+                with open("cache/user_playlist.json", "r") as f:
+                    data = json.load(f)
+
+                data["youtube"] = cache
+
+                with open("cache/user_playlist.json", "w") as f:
+                    json.dump(data, f)
+                    
+            except FileNotFoundError:
+                data = {"youtube" : cache}
+
+                with open("cache/user_playlist.json", "w") as f:
+                    json.dump(data, f)
 
         return playlists
 
@@ -234,8 +267,11 @@ class Youtube():
                         time.append(character)
                     elif character == "S":
                         if time[-2] == ":":
-                            time.insert(time.index(time[-1]), "0")
-                    
+                            time.insert(len(time)-1, "0")
+                
+                if time[-1] == ":":
+                    time.append("00")
+
                 duration = "".join(time)
 
                 track["contentDetails"]["duration"] = duration
@@ -324,7 +360,7 @@ class Youtube():
             return request_one
 
 
-    def get_playlist_tracks_info(self, ID:str) -> dict:
+    def get_playlist_tracks_info(self, ID:str) -> list:
         """
         get complete info about tracks from a playlist using its id
 

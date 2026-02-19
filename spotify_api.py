@@ -3,6 +3,11 @@
 #OS: Debian GNU/Linux 13 (Trixie)
 #This script is not officially support by Spotify
 
+"""
+./spotify_api.py
+
+Module to simplify the interaction with the Spotify API
+"""
 
 import os, json
 import spotipy
@@ -36,7 +41,7 @@ class Spotify():
         if DEBUG == True:
             print("Login... ok")
 
-    
+
     def __format_duration__ (self, time:str) -> str:
         """
         - inner work funtion
@@ -61,16 +66,16 @@ class Spotify():
 
         return str( int(minutes) ) + ":" + seconds
 
-    
+
     def __get_next_page__(self, previous_request:str) -> list:
         """
         - inner work funtion
-        
+
         get the next page from a request to the api
-        
+
         inputs:
             previous_request (dict) : previous petition to the api to extract the 'next' href
-            
+
         output:
             tracks (list) : almost all the tracks from the playlist
 
@@ -86,7 +91,7 @@ class Spotify():
         return tracks
 
 
-    def get_user_playlists(self) -> list:
+    def get_user_playlists(self, save_as_file:bool = False) -> list:
         """
         get the library from the user
 
@@ -105,7 +110,7 @@ class Spotify():
             except FileNotFoundError:
                 if DEBUG == True:
                     print("(get_user_playlists) [ERROR] file not found. using api instead")
-                
+
                 USER_PLAYLIST = self.API.current_user_playlists()
 
                 if DEBUG == True:
@@ -120,13 +125,34 @@ class Spotify():
                 print("(get_user_playlists) data location: API request.")
 
             USER_PLAYLIST = self.API.current_user_playlists()
-        
+
             if DEBUG == True:
                 print("(get_user_playlists) username:", USER_PLAYLIST["items"][0]["owner"]["display_name"])
 
+        if save_as_file == True:
+            cache = []
+            # extract only the ids and names from playlists
+            for x in USER_PLAYLIST["items"]:
+                cache.append((x["id"], x["name"]))
+
+            try:
+                with open("cache/user_playlist.json", "r") as f:
+                    data = json.load(f)
+
+                data["spotify"] = cache
+
+                with open("cache/user_playlist.json", "w") as f:
+                    json.dump(data, f)
+                    
+            except FileNotFoundError:
+                data = {"spotify" : cache}
+
+                with open("cache/user_playlist.json", "w") as f:
+                    json.dump(data, f)
+
         return USER_PLAYLIST
 
-    
+
     def get_track_info(self, IDs:str|list) -> dict or list:
         """
         get info of the track/s
@@ -155,11 +181,11 @@ class Spotify():
         if (argum == str(IDs)):
             if DEBUG == True:
                 print("(get_track_info) data location: local cache", end="\n\n")
-             
+
             with open(r"cache/sp_track.cache", "r") as local:
                 local.readline()
                 request = json.load(local)
-        
+
         else:
             if DEBUG == True:
                 print("(get_track_info) data location: API request", end="\n\n")
@@ -185,7 +211,7 @@ class Spotify():
             with open(r"cache/sp_track.cache", "w") as local:
                 local.write(str(IDs) + "\n")
                 json.dump(request, local)
-        
+
         return request
 
 
@@ -246,7 +272,7 @@ class Spotify():
         if (argum == ID):
             if DEBUG == True:
                 print("(get_playlist_info) data location: local cache", end="\n\n")
-            
+
             with open(r"cache/sp_playlist_info.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
@@ -307,7 +333,7 @@ class Spotify():
         if (argum == metadata):
             if DEBUG == True:
                 print("(search_track) data location: local cache", end="\n\n")
-            
+
             with open(r"cache/sp_search.cache", "r") as local:
                 local.readline()
                 content = json.load(local)
